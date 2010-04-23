@@ -1,0 +1,43 @@
+// This mel script should be saved as 
+// "MayaFileExportScript.mel" and placed inside your scripts
+// directory. This is usually "my documents/maya/scripts" or 
+// "~/maya/scripts" on linux. 
+
+// $parent - the parent UI layout
+// $action - "post" or "query"
+// $settings - the initial exporter settings
+// $callback - the function to call
+
+global proc int MD2ExportOptionsScript(string $parent, string $action, string $settings, string $callback){
+
+	// POST ACTION -- called when the user clicks "options" and we need to set the UI elements to
+	// display the default values
+	
+	if ($action == "post") {
+		setParent $parent; // attachs the GUI to the correct parent layout
+		columnLayout -adj true;
+		
+		text -label "Full path to frame list file (.txt)";
+		string $frameListPath = `textField -w 64`;
+		
+		text -label "Texture path to prepend";
+		string $texturePath = `textField -w 64`;
+
+		// split the previous set of options
+		string $options[];
+		int $ntokens=`tokenize $settings " " $options`;
+
+		// loop through each option
+		for( $i=0; $i<$ntokens; ++$i ) {
+			$option = $options[$i];
+			if ($option == "-frameListPath") {
+				textField -e -tx $options[++$i];
+			}
+		}
+		
+	// QUERY ACTION -- called when the program needs to figure out what values the user set in the UI
+	} else if ($action == "query") { 
+ 		string $option = "-frameListPath " + `textField -q -tx frameListPath` + " -texturePath " + `textField -q -tx texturePath`;
+ 	}
+ 	return 1;
+} 	

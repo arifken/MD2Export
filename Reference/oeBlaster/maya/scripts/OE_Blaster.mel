@@ -1,0 +1,979 @@
+//==========================================================================================================================
+//OE_BLASTER.MEL BY CHRISTOPHER EDWARDS. Copyright 2006-2007.
+//
+//Visit www.zbufferstudios.com or go directly to scripts.zbufferstudios.com for more MEL scripts
+//Email me with questions: help@scripts.zbufferstudios.com
+//==========================================================================================================================
+//
+//Version 2.0 (beta)
+//
+//==========================================================================================================================
+//
+//PURPOSE
+//This script provides procedures and a GUI for automated export of OBJ sequences for a frame range of
+//deforming polygons to be used for animation files (Houdini, for ex.). It also now includes an importer
+//for OBJ sequences for Maya.
+//
+//USAGE
+//This script has four main procedures: the main OE_BlasterWindow() GUI, the OE_Executer() which calls
+//OE_Blaster() from the GUI, the OE_Blaster() which handles all the actual work, and the new OE_Importer()
+//which handles the importing of the OBJ sequences. OE_Blaster() is separate in case command line execution
+//is desired.
+//
+//LIMITATIONS: I have not tested it on non-Windows NT platforms and the file browse may not work due to the
+//fileBrowserDialog function. However, the output path can still be manually typed in on Linux or Macintosh
+//if necessary. Command line functionality should also be unchanged on OS other than Windows NT.
+//
+//==========================================================================================================================
+//Version History
+//
+//0.1 Initial release with no GUI and hardcoded minimum functionality
+//
+//0.2 GUI development version with some procedural modifications
+//
+//1.0 Release version. GUI fully functional and connected to other procedures.
+//
+//1.1 Added graphics. Functionality added for file padding and proper sequence formatting.
+//		Added support for single vs. multiple file export given multiple selections. Added support for deriving
+//		file name from the object name. Eliminated redundant code or commented code. Overhauled the GUI.
+//
+//2.0 Complete code overhaul. Added in support for importing OBJ sequences. GUI updated and improved. Created help section.
+//
+//==========================================================================================================================
+
+//==========================================================================================================================
+//Begin Script
+//==========================================================================================================================
+//Declare Global Variables
+//==========================================================================================================================
+
+global string $OE_FilePath = "";
+global string $iF1, $iF2;
+global string $rCol1, $rCol2, $rBG1, $rBG2, $rBG3, $rBG4, $rBG5;
+global string $executeMe;
+global int $padding;
+global string $iFG;
+global string $textFieldGrp;
+global string $previewField;
+global string $OEexport;
+global string $OEimport;
+global string $OEmain;
+global string $OE_importPath;
+global string $iStart;
+global string $iEnd;
+global string $iPad;
+global string $iOffset;
+global string $OE_iName;
+global int $isSubD;
+global int $isCaching;
+global string $subDBox, $cacheBox;
+global string $objCacheNodes[];
+global string $browser;
+
+//==========================================================================================================================
+//OE_BlasterWindow procedure
+//==========================================================================================================================
+global proc OE_BlasterWindow(){
+
+	//Globals used
+	global string $OE_FilePath;
+	global string $iF1, $iF2;
+	global string $rCol1, $rCol2, $rBG1, $rBG2, $rBG3, $rBG4, $rBG5;
+	global string $iFG;
+	global string $textFieldGrp;
+	global string $previewField;
+	global string $OEexport;
+	global string $OEimport;
+	global string $OEmain;
+	global string $OE_importPath;
+	global string $iStart;
+	global string $iEnd;
+	global string $iPad;
+	global string $iOffset;
+	global string $OE_iName;
+	global int $isSubD;
+	global int $isCaching;
+	global string $subDBox, $cacheBox;
+	global string $objCacheNodes[];
+
+	//variables
+	string $browseCommand = "fileBrowserDialog -m 1 -fc \"OE_Parser\" -an \"OE_Blaster\" -ft \"obj\" -om \"SaveAs\"; textFieldButtonGrp -e -tx $OE_FilePath $textFieldGrp; OE_Padder;";
+
+	//procedure code
+
+	//if window exists then show it
+	if (`window -exists OE_Window`)
+	{
+		showWindow OE_Window;
+	}
+	else
+	{
+		//create window
+		window -t "OE Blaster v2.0 (beta)" -rtf true -mb true -s false -w 605 -mxb false -ret OE_Window;
+		menu -label "Mode";
+			radioMenuItemCollection;
+	 		menuItem -rb true -l "Export" -c "columnLayout -e -vis 0 $OEimport;columnLayout -e -vis 1 $OEexport;";
+	 		menuItem -rb false -l "Import" -c "columnLayout -e -vis 0 $OEexport;columnLayout -e -vis 1 $OEimport;";
+	 	menu -l "Help" -hm true;
+	 		menuItem -l "Documentation" -c "OEhelp";
+	 	menu -l "Defaults";
+	 		menuItem -l "Reset" -c "OE_Defaults(1)";
+	 		menuItem -l "Save"  -c "OE_Defaults(2)";
+	 		menuItem -l "Load"  -c "OE_Defaults(3)";
+	 	menu -l "Caches";
+	 		menuItem -l "Clear" -c "delete $objCacheNodes; clear$objCacheNodes;";
+
+	 		//main parent layout
+	 		$OEmain = `columnLayout`;
+	 		image -h 45 -w 600 -i (`internalVar -ubd`+"OE_BlasterLogo.bmp");
+
+			//begin export layout
+			$OEexport = `columnLayout -columnWidth 600 -columnAttach "both" 0`;
+				string $RowL1 = `rowLayout -nc 2 -cw2 115 400`;
+					string $CoL1 = `columnLayout -rowSpacing 1 -cw 110 -cat "both" 0`;
+						columnLayout -h 3;
+						setParent -u;
+						columnLayout -h 3;
+						setParent -u;
+						text -align "left" -label "Export" -font "tinyBoldLabelFont";
+						text -align "left" -label "Options" -font "tinyBoldLabelFont";
+						text -align "left" -label "Off  On";
+						columnLayout -h 1;
+						setParent -u;
+						rowLayout -nc 2 -cw2 40 100 -cl2 "left" "right";
+							columnLayout -rs 2;
+								$rBG1 = `radioButtonGrp -nrb 2 -labelArray2 "" "" -cl2 "left" "left" -cw2 20 20 -sl 1`;
+								$rBG2 = `radioButtonGrp -nrb 2 -labelArray2 "" "" -cl2 "left" "left" -cw2 20 20 -sl 1`;
+								$rBG3 = `radioButtonGrp -nrb 2 -labelArray2 "" "" -cl2 "left" "left" -cw2 20 20 -sl 1`;
+								$rBG4 = `radioButtonGrp -nrb 2 -labelArray2 "" "" -cl2 "left" "left" -cw2 20 20 -sl 1`;
+								$rBG5 = `radioButtonGrp -nrb 2 -labelArray2 "" "" -cl2 "left" "left" -cw2 20 20 -sl 1`;
+								setParent -u;
+							columnLayout -rs 2;
+								text -label "Groups" -align "left";
+								text -label "Pt. Groups" -align "left";
+								text -label "Normals" -align "left";
+								text -label "Materials" -align "left";
+								text -label "Smoothing" -align "left";
+								setParent -u;
+						setParent $RowL1;
+
+					string $Col2 = `columnLayout -rowSpacing 2 -cw 490 -cat "both" 0`;
+						columnLayout -h 1;
+							setParent -u;
+						rowLayout -nc 2 -cw2 300 200 -ct2 "left" "both";
+						text -w 100 -label "Filepath" -font "tinyBoldLabelFont" -align "left";
+						$iFG = `intFieldGrp -nf 1 -v1 1 -cw 2 47 -cat 2 "both" 4 -label "Frame Padding" -cc "if(`intFieldGrp -q -v1 $iFG`<1) intFieldGrp -e -v1 1 $iFG;OE_Padder;"`;
+						setParent -u;
+						$textFieldGrp = `textFieldButtonGrp -cw2 435 50 -tx $OE_FilePath -bl "Browse" -bc $browseCommand -cc "OE_Padder"`;
+						$previewField = `textFieldGrp -en false -cw 1 483`;
+						columnLayout -h 3;
+							setParent -u;
+						columnLayout -h 1;
+							setParent -u;
+
+						string $RowL11 = `rowLayout -nc 3 -cw3 165 235 100`;
+							string $CoL2 = `columnLayout -rowSpacing 6 -cw 165 -cat "both" 0`;
+								text -label "Time Range" -font "tinyBoldLabelFont" -align "left";
+								string $RoL9 = `rowLayout -nc 2 -cw2 85 250 -ct2 "left" "left"`;
+									$rCol1 = `radioCollection`;
+									radioButton -label "Begin/End" -sl;
+									radioButton -label "Time Slider";
+									setParent -u;
+								string $RowL3 = `rowLayout -nc 3 -cl3 "left" "left" "both" -cw3 50 150 100 -co3 0 0 150`;
+									string $rButton = `radioButton -cl $rCol1 -label "User"
+									 -onc "control -e -en true $iF1; control -e -en true $iF2;"
+									 -ofc "control -e -en false $iF1; control -e -en false $iF2;"
+									 `;
+									string $RoL10 = `rowLayout -nc 2 -cl2 "left" "right" -cw2 60 60`;
+										$iF1 = `intField -en false -v 0`;
+										$iF2 = `intField -en false -v 0`;
+										setParent $RowL11;
+							columnLayout -cw 235 -rs 4 -cat "both" 0;
+								columnLayout;
+								setParent -u;
+								text -align "left" -label "MultiSelect Options" -font "tinyBoldLabelFont";
+								$rCol2 = `radioCollection`;
+								radioButton -label "Combine All    (merge to single file)" -align "left" -sl;
+								radioButton -label "Output Each  (filename from object)" -align "left";
+								setParent -u;
+							string $CoL3 = `columnLayout -cw 100 -cat "left" 0 -rowSpacing 12`;
+								button -h 20 -w 80 -label "Close" -c "window -e -vis false OE_Window";
+								symbolButton -h 20 -w 80 -c "OE_Executer;window -e -vis 0 OE_Window;" -i "OE_BlasterButton.bmp";
+					setParent $OEmain;
+		//end export layout
+
+		//begin import layout
+			$OEimport = `columnLayout -p $OEmain -adj true -rs 3`;
+				columnLayout -co "left" 5 -rs 5;
+					text -w 100 -label "Filepath" -font "tinyBoldLabelFont" -align "left";
+					$OE_importPath = `textFieldButtonGrp -bl "Browse" -cw 1 545`;
+					textFieldButtonGrp -e -bc "textFieldButtonGrp -e -tx `fileDialog -dm \"*.obj\"` $OE_importPath;OE_Sequencer;" $OE_importPath;
+					textFieldButtonGrp -e -cc "OE_Sequencer" $OE_importPath;
+					setParent ..;
+				rowLayout -nc 4 -cw4 200 100 120 180;
+					columnLayout -rs 5 -co "left" 5;
+						text -w 200 -align "left" -label "Import Options" -font "tinyBoldLabelFont";
+						$subDBox = `checkBox -l "Create node as SubD" -al "left" -cc "$isSubD = !$isSubD"`;
+						$cacheBox = `checkBox -en false -l "Caching (recommended)" -v 1 -al "left"  -cc "$isCaching = !$isCaching"`;
+						setParent ..;
+					columnLayout -rs 5;
+						text -l "" -h 13;
+						$iStart = `intFieldGrp -nf 1 -l "Start --" -cl2 "left" "left" -cw2 40 50`;
+						$iEnd = `intFieldGrp -nf 1 -l "End --" -cl2 "left" "left" -cw2 40 50`;
+						setParent ..;
+					columnLayout -rs 5;
+						text -l "" -h 13;
+						$iOffset = `intFieldGrp -nf 1 -l "Offset --" -cl2 "left" "left" -cw2 70 50`;
+						$iPad = `intFieldGrp -nf 1 -l "Padding --" -cl2 "left" "left" -cw2 70 50`;
+						setParent ..;
+					columnLayout -rs 12 -cat "right" 5 -cw 180;
+						text -l "" -h 14;
+						button -h 20 -w 80 -label "Close" -c "window -e -vis false OE_Window";
+						symbolButton -h 20 -w 80 -c "OE_Importer((dirname(`textFieldButtonGrp -q -tx $OE_importPath`)), $OE_iName, `intFieldGrp -q -v1 $iStart`, `intFieldGrp -q -v1 $iEnd`, `intFieldGrp -q -v1 $iOffset`, `intFieldGrp -q -v1 $iPad`, $isCaching, $isSubD);window -e -vis 0 OE_Window;" -i "OE_BlasterButton.bmp";
+		//end import layout
+		setParent $OEmain;
+		
+		//hide the import layout by default
+		columnLayout -e -vis 0 $OEimport;
+		
+		//load window defaults
+		OE_Defaults(3);
+
+		//display window
+		showWindow OE_Window;
+	}
+
+	$isSubD = `checkBox -q -v $subDBox`;
+	$isCaching = `checkBox -q -v $cacheBox`;
+
+} //end of OE_BlasterWindow()
+
+//==========================================================================================================================
+//OE_Blaster procedure: This is the MAIN procedure.
+//==========================================================================================================================
+global proc OE_Blaster(string $rangeType, string $rangeMin, string $rangeMax, int $groups, int $ptgroups, int $smoothing, int $normals, int $materials){
+
+	//global variables used
+	global string $previewField;
+	global string $rCol2;
+
+	//variables
+	string $selection[];	 			//holds the selected objects
+	string $forExportCombine[];			//geometry for export
+	string $forExport; 					//geometry for multi-file export
+	string $operations; 				//operations list
+	int $begin, $end, $current;			//store timeslider ranges for the for loop
+	int $size;							//size of the selection
+	string $filepath; 					//output from the explorer window function used by OE_Parser & OE_Exporter
+
+	//Check whether maya already has objExport plugin loaded. If not, then load.
+	if (!(`pluginInfo -q -l objExport`))
+	{
+		loadPlugin objExport;
+	}
+
+	//Get selection
+	$selection = `filterExpand -ex true -sm 12`; //Gets the selection list.
+	$size = size($selection); //Find out how many different objects are selected.
+
+
+	//If user has selected nothing (or no poylgons) then they are flagged with a warning and the script ends.
+	if ($size > 0)
+	{
+		//Get user file output path and store it for use in the below for loop. Tokenize it for frame padding.
+		$filepath = `textFieldGrp -q -tx $previewField`;
+
+		//Build list of operations
+		$operations = "\"groups=" + $groups + ";ptgroups=" + $ptgroups + ";materials=" + $materials + ";smoothing=" + $smoothing + ";normals="+$normals+"\"";
+
+		//Traverse the timeline based upon requested animation range
+			//playbackOptions min/max for loop region, ast/aet for whole range
+		if ($rangeType == "radioButton2")			//radioButton2 is Time Slider
+		{
+			$begin = `playbackOptions -q -min`;
+			$end = `playbackOptions -q -max`;
+		}
+		else if ($rangeType == "radioButton1")		//radioButton1 is Begin/End
+		{
+			$begin = `playbackOptions -q -ast`;
+			$end = `playbackOptions -q -aet`;
+		}
+		else if ($rangeType == "radioButton3")	//radioButton3 is User
+		{
+			$begin = (int)$rangeMin;
+			$end = (int)$rangeMax;
+		}
+
+		//If statement checks to see whether single file or multiple file output was requested.
+		if ((`radioCollection -q -sl $rCol2`) == "radioButton5")
+		{
+			//Case: Output Each
+			//Build new filepath tokenizing "/" characters to extract the path without filename so it cant be named according to objects
+			$filepath = OE_PathExtractor($filepath);
+
+			//for loop runs the exporting process for each object at a time
+			for ($i = 0; $i < $size; $i ++)
+			{
+				$forExport = $selection[$i];
+				select -r $forExport;
+				for ($current = $begin; $current <= $end; $current++)
+				{
+					currentTime -e $current -u true;
+					//Perform the export: OE_Parser was called above as the command action for the file browser
+					//Then OE_Exporter uses its output
+					select -r $forExport;
+					OE_Exporter($operations, ($filepath+$forExport), $current);
+				}
+			}
+		}
+
+		//Else statement handles combined export
+		else
+		{
+			//Case: Combine All
+			$forExportCombine = $selection;
+			select -r $forExportCombine;
+			for ($current = $begin; $current <= $end; $current++)
+			{
+				currentTime -e $current -u true;
+				//Perform the export: OE_Parser was called above as the command action for the file browser
+				//Then OE_Exporter uses its output
+				select -r $forExportCombine;
+				OE_Exporter($operations, $filepath, $current);
+			}
+		}
+	}
+	else print("You must select atleast one polygon!");
+
+	select -r $selection;
+
+}//end of OE_Blaster()
+
+
+//==========================================================================================================================
+//This is the exporting function used in OE_Blaster()
+//==========================================================================================================================
+global proc OE_Exporter(string $ops, string $path, int $frame){
+
+	//global variables used
+	global int $padding;
+
+	//initialize variables
+	string $sframe = $frame;
+	int $frameSize = size($sframe);
+	string $pad = "";
+	string $inPath = OE_Tokenizer($path);
+	string $outPath = "";
+
+	//Determine if there was frame padding, if so build.
+	if ($padding)
+	{
+		//For loop builds the padding using the frame. Stored in $pad;
+		for ($i = 0; $i >= ($frameSize - $padding +1); $i--)
+		{
+			$pad = $pad + "0";
+		}
+		//build the outPath and call the export plugin using that path
+		$outPath = $inPath + "." + $pad + $frame;
+	}
+	//If there was no frame padding
+	else $outPath = $inPath + $frame;
+
+	file -op $ops -typ "OBJexport" -es ($outPath);
+
+}//end of OE_Exporter()
+
+//==========================================================================================================================
+//This function gets the export path for use in OE_Exporter
+//==========================================================================================================================
+global proc OE_Parser(string $pathparser, string $objType){
+
+	//global variables used
+	global string $OE_FilePath;
+
+	//function code
+	$OE_FilePath = $pathparser;
+
+}//end of OE_Parser()
+
+//==========================================================================================================================
+//Processes the user input file path to make it friendlier for OE_Padder to work with.
+//==========================================================================================================================
+global proc string OE_Tokenizer(string $oldfilepath){
+
+	//variables
+	string $newfilepath;
+	string $buffer[];
+	int $numtokens;
+
+	//main section
+	$numtokens = `tokenize $oldfilepath "." $buffer`;
+	$newfilepath = $buffer[0];
+
+	return $newfilepath;
+
+}//end of OE_Tokenizer()
+
+//==========================================================================================================================
+//Handles the call to OE_Blaster from the GUI which enables OE_Blaster to be also used in a command line fashion.
+//==========================================================================================================================
+global proc OE_Executer(){
+
+	//globals used
+	global string $iF1, $iF2;
+	global string $textFieldGrp;
+	global string $rCol1, $rBG1, $rBG2, $rBG3, $rBG4, $rBG5;
+
+	//variable declaration
+	string $executeMe;
+
+	//Setup the execution script
+	$executeMe = "OE_Blaster(" + "\"" + (`radioCollection -q -sl $rCol1`) + "\"" + "," + (`intField -q -v $iF1`)+ "," + (`intField -q -v $iF2`) + "," + (`radioButtonGrp -q -sl $rBG1` - 1) + "," + (`radioButtonGrp -q -sl $rBG2` - 1) + "," + (`radioButtonGrp -q -sl $rBG5` - 1) + "," + (`radioButtonGrp -q -sl $rBG3` - 1) + "," + (`radioButtonGrp -q -sl $rBG4` - 1) + ")";
+
+	//Run OE_Blaster
+	eval $executeMe;
+
+}//end of OE_Executer()
+
+//==========================================================================================================================
+//This procedure adds frame padding to the user input file path as well as handles all updates to the preview text field
+//which is the final storage place for the export path which is referenced by OE_Blaster. OE_Padder is called by the
+//Browse button, and by any textfield changes to the padding or filepath sections.
+//==========================================================================================================================
+global proc OE_Padder(){
+
+	//globals used
+	global int $padding;
+	global string $iFG;
+	global string $previewField;
+	global string $textFieldGrp;
+
+	//initialize variables
+	string $inputfilepath = `textFieldGrp -q -tx $textFieldGrp`;
+	$padding = `intFieldGrp -q -v1 $iFG`;
+	string $buffer = OE_Tokenizer($inputfilepath);
+	string $suffix = "";
+	string $newfilepath;
+
+	//The if statement checks to see if padding is necessary.
+	//If padding is zero then skips the for loop.
+	if ($padding > 0)
+	{
+		//for loop constructs the file padding.
+		for ($i = 0; $i < $padding; $i++)
+		{
+			$suffix = $suffix + "0";
+		}
+		//build the new file path
+		$newfilepath = ($buffer + "." + $suffix + ".obj");
+	}
+
+	//Else statement handles the no file padding case.
+	else $newfilepath = ($buffer + ".obj");
+
+	//Update the preview field
+	textFieldGrp -e -tx ($newfilepath) $previewField;
+
+}//end of OE_Padder()
+
+//==========================================================================================================================
+//This function rebuilds the filepath so that it has no user input file name in order for each selected object name to be
+//substituted. Called by OE_Blaster.
+//==========================================================================================================================
+global proc string OE_PathExtractor (string $namedPath){
+
+	//initialize variables
+	string $unNamedPath = "";
+	string $buffer[];
+	int $numtokens;
+	int $size; 					//size of buffer
+
+	//tokenize the named path
+	$numtokens = `tokenize $namedPath "/" $buffer`;
+	$size = size($buffer);
+
+	//for loop rebuilds path
+	for ($i = 0; $i < ($size-1); $i++)
+	{
+		$unNamedPath = ($unNamedPath + $buffer[$i] + "//");
+	}
+
+	return $unNamedPath; 		//returns path for adding new filename
+
+}//end of OE_PathExtractor()
+
+//==========================================================================================================================
+//
+//==========================================================================================================================
+global proc OE_Importer(string $path, string $obj, int $start, int $end, int $offset, int $padding, int $caching, int $subD){
+
+	$obj = `toupper $obj`;
+	file -i -gr -gn ("OE_"+$obj) -typ "OBJ" ($path + "/" + $obj + "." + $start + ".obj");
+	hide ("OE_"+$obj);
+	string $controlMesh[] = `listRelatives -c ("OE_"+$obj)`;
+	$obj = `tolower $obj`;
+	$controlMesh[0] = `rename $controlMesh ($obj+"OBJ")`;
+	string $drivenMesh[];
+	//setup the drivenMesh as a SubD if desired
+	if($subD)
+	{
+		$drivenMesh = `polyToSubdiv -mpc 100000 -o true $controlMesh[0]`;
+		$drivenMesh[0] = `rename $drivenMesh[0] $obj`;
+	}
+	//otherwise setup as polymesh
+	else
+	{
+		$drivenMesh = `duplicate -rr $controlMesh[0]`;
+		parent -w $drivenMesh[0];
+		$drivenMesh[0] = `rename $drivenMesh[0] $obj`;
+		connectAttr -f ($controlMesh[0]+".outMesh") ($drivenMesh[0]+".inMesh");
+	}
+
+	//create the READER node and CACHE nodes (if caching)
+	$obj = `toupper $obj`;
+	OE_READER($path, $obj, $controlMesh[0], $start, $end, $offset, $padding, $caching);
+
+}//end of OE_Importer()
+
+//==========================================================================================================================
+//Searches the given file path and automatically determines many settings such as framerange, padding, object name, etc.
+//==========================================================================================================================
+global proc OE_Sequencer(){
+
+	global string $OE_importPath;
+	global string $iStart;
+	global string $iEnd;
+	global string $iPad;
+	global string $iOffset;
+	global string $OE_iName;
+
+	//parse the file path in order to glean the data
+	$OE_iName = basenameEx(`textFieldGrp -q -tx $OE_importPath`);
+	string $buffer[];
+	tokenize $OE_iName "." $buffer;
+ 	$OE_iName = $buffer[0];
+ 	clear $buffer;
+	string $path = dirname(`textFieldGrp -q -tx $OE_importPath`);
+	string $fileList[] = `getFileList -folder ($path+"/") -filespec ("*.obj")`;
+	for($each in $fileList)
+	{
+		if(!`gmatch $each ($OE_iName+"*")`) $buffer[size($buffer)] = $each;
+	}
+	$fileList = stringArrayRemove($buffer, $fileList);
+	int $indices[];
+	tokenize (startString($fileList[0],(size($fileList[0])-4))) "." $buffer;
+	string $startIndexString = $buffer[1];
+	for($file in $fileList)
+	{
+		tokenize (startString($file,(size($file)-4))) "." $buffer;
+		$indices[size($indices)] = int($buffer[1]);
+	}
+	$indices = bubbleSortInt($indices, "intCompare");
+	int $start = $indices[0];
+	int $end = $indices[size($indices)-1];
+	int $padding = size($startIndexString);
+
+	//return the values to the GUI
+	intFieldGrp -e -v1 $start $iStart;
+	intFieldGrp -e -v1 $end $iEnd;
+	intFieldGrp -e -v1 $padding $iPad;
+	intFieldGrp -e -v1 ($start-`playbackOptions -q -min`) $iOffset;
+
+}//end of OE_Sequencer()
+
+//==========================================================================================================================
+//Translates the OBJ format into a Maya parsable list of vectors (only concerned with the vertex list in this case)
+//==========================================================================================================================
+global proc vector[] OBJ_Translator(string $file){
+
+	vector $vertexList[];
+	string $nextLine;
+	string $tokenizedList[];
+	int $fileId;
+
+	//open file for reading
+	$fileId=`fopen $file "r"`;
+
+	//begin translating the list
+	while ( !`feof $fileId` )
+	{
+ 		$nextLine = `fgetline $fileId`;
+ 		if(!(startsWith($nextLine, "v "))) continue; //OBJ file format tokenizes vertex lists with the "v " character
+ 		tokenizeList($nextLine, $tokenizedList);
+ 		$vertexList[size($vertexList)] = <<(float($tokenizedList[1])),(float($tokenizedList[2])),(float($tokenizedList[3]))>>;
+ 	}
+
+ 	//close the file
+ 	fclose $fileId;
+
+ 	//return the list
+	return $vertexList;
+
+}//end of OBJ_Translater()
+
+//==========================================================================================================================
+//Creates the reader node and expresions for using the OBJ sequences
+//==========================================================================================================================
+global proc OE_READER(string $path, string $obj, string $controlMesh, int $start, int $end, int $offset, int $padding, int $caching){
+
+	string $ext;
+	int $diff;
+	string $cmd;
+	vector $points[];
+	int $size = 0;
+
+	if($caching)
+	{
+		//create the cache node
+		$size = OE_Cacher($path, $obj, $start, $end, $padding);
+		progressWindow -endProgress; //just in case the window isn't closed inside OE_CACHER (which sometimes happens)
+	}
+
+	string $mesh = ($obj + "_OBJREADER");
+	string $target[] = `ls -s -dag -l $controlMesh`;
+
+	//this is the expression for the reader node for convenience of changing--insert into the expression statement below
+/*"
+	$start = " + $start + "; \//start obj seq\n
+	$end = " + $end + "; \//end obj seq\n
+	$frame = frame;\n
+	if(frame>$end) $frame = $end;\n
+	else if(frame<$start) $frame = $start;\n
+	$offset = " + $offset + "; \//time offset\n
+	$size = " + $size + "; \//verts\n
+	$cmd = \"setAttr \\\"" + $target[0] + ".pnts[0:" + ($size-1) +"]\\\" \";\n
+	if(`objExists " + $obj + "_CACHE`)\n
+	{\n
+	$points = `getAttr (\"" + $obj + "_CACHE.f\" + ($frame+$offset))`;\n
+	$cmd += $points;\n
+	}\n
+	else\n
+	{\n
+	$ext = string(frame);\n
+	if(size($ext) < $padding)\n
+	{\n
+	$diff = ($padding - size($ext));\n
+	for($j=0;$j<$diff;$j++)\n
+	{\n
+	$ext = \"0\" + $ext;\n
+	}\n
+	}\n
+	vector $points[] = OBJ_Translator(\"" + $path + "/" + `tolower $obj` + ".\" + $ext + \".obj\");\n
+	float $pointFloat[];\n
+	vector $pointVector;\n
+	vector $delta;\n
+	for($j=0;$j<size($points);$j++)\n
+	{\n
+	$pointFloat = `getAttr " + $target[0] + ".vrts[$j]`;\n
+	$pointVector = <<$pointFloat[0],$pointFloat[1],$pointFloat[2]>>;\n
+	$delta = $points[$j] - $pointVector;\n
+	$cmd += (($delta.x)+\" \"+($delta.y)+\" \"+($delta.z)+\" \");\n
+	}\n
+	}\n
+	eval $cmd;\n
+	move -r 0 0 0 " + $target[0] + ".pnts[0];\n
+"*/
+//i have currently removed the portion from the else statement above since using file i/o during render time breaks
+//the whole script--might have a work around in the future, but for now caching is required
+	//create the reader expression for the $controlMesh
+	expression -s ("$start = " + $start + "; \//start obj seq\n$end = " + $end + "; \//end obj seq\n$frame = frame;\nif(frame>$end) $frame = $end;\nelse if(frame<$start) $frame = $start;\n$offset = " + $offset + "; \//time offset\n$size = " + $size + "; \//verts\n$cmd = \"setAttr \\\"" + $target[0] + ".pnts[0:" + ($size-1) +"]\\\" \";\nif(`objExists " + $obj + "_CACHE`)\n{\n$points = `getAttr (\"" + $obj + "_CACHE.f\" + ($frame+$offset))`;\n$cmd += $points;\n}\neval $cmd;\n") -n $mesh;
+	addAttr -ln "inCache" -at message ($obj+"_OBJREADER");
+	$cachenode = ($obj+"_CACHE");
+	if(size(`ls $cachenode`)) connectAttr -f ($cachenode+".outCache") ($obj+"_OBJREADER.inCache");
+	connectAttr -f ($obj+"_OBJREADER.caching") ($target[0]+".caching");
+	move -r 0 0 0 ($target[0]+".pnts[0]");
+
+}//end of OE_READER()
+//==========================================================================================================================
+//Caches the object: stores the delta values between frames since setting the control points attribute is a relative change
+//==========================================================================================================================
+global proc int OE_Cacher(string $path, string $obj, int $start, int $end, int $padding){
+
+	global string $objCacheNodes[];
+	
+	int $amount = 0;
+	int $increment;
+	float $rawIncrement = (100.0/($end-$start+1));
+	if(`trunc $rawIncrement` < $rawIncrement) $increment = int(`trunc $rawIncrement`+1);
+	else $increment = int(`trunc $rawIncrement`);
+	vector $points[];
+	vector $delta;
+	string $ext = string($start);
+
+	if(size($ext) < $padding)
+	{
+		$diff = ($padding - size($ext));
+		for($j=0;$j<$diff;$j++)
+		{
+			$ext = "0" + $ext;
+		}
+	}
+	//get the starting point to determine deltas for caching
+	vector $startPoint[] = OBJ_Translator($path+"/"+$obj+"."+$ext+".obj");
+
+	$objCacheNodes[size($objCacheNodes)] = `createNode "null" -n ($obj+"_CACHE")`;
+	addAttr -ln "outCache" -at message ($obj+"_CACHE");
+
+	progressWindow
+           -title "OBJ Cache"
+           -progress $amount
+           -status "Caching: 0%"
+           -isInterruptable true;
+
+    //beging to add the vector lists for each frame
+	for($i=$start; $i<=$end; $i++)
+	{
+		// Check if the dialog has been cancelled
+       	if (`progressWindow -query -isCancelled`) break;
+
+       	$ext = string($i);
+		if(size($ext) < $padding)
+		{
+			$diff = ($padding - size($ext));
+			for($j=0;$j<$diff;$j++)
+			{
+				$ext = "0" + $ext;
+			}
+		}
+		//create the delta storage array
+		addAttr -s true -sn ("f"+$i) -dt "string";
+
+		$points = OBJ_Translator($path+"/"+$obj+"."+$ext+".obj");
+		$cmd = ("setAttr \"" + $obj + "_CACHE.f" + $i + "\" -typ \"string\" \"");
+		for($j=0;$j<size($points);$j++)
+		{
+			$delta = $points[$j] - $startPoint[$j];
+			$cmd += (($delta.x)+" "+($delta.y)+" "+($delta.z)+" ");
+		}
+		$cmd += "\"";
+		catch(`eval $cmd`);
+		$amount += $increment;
+
+	    progressWindow -edit
+	          -progress $amount
+	          -status ("Caching: "+$amount+"%");
+
+	    // Check if end condition has been reached
+        if ( `progressWindow -query -progress` >= 100 ) progressWindow -edit -progress 100 -status ("Caching: 100%");
+	}
+
+    progressWindow -endProgress;
+
+    return (size($points));
+
+}//end of OE_Cacher()
+
+//==========================================================================================================================
+//Compares two integers...returns 1 if a>b, -1 if b>a, or 0 if equal
+//==========================================================================================================================
+global proc int intCompare(int $a, int $b){
+
+	if($a>$b) return 1;
+	else if($b>$a) return -1;
+	else return 0;
+
+}//end of intCompare
+
+//==========================================================================================================================
+//OE_Defaults: resets, stores, and loads default settings for the window
+//==========================================================================================================================
+global proc OE_Defaults(int $mode){
+
+	//associate globals
+	global string $iF1, $iF2;
+	global string $rCol1, $rCol2, $rBG1, $rBG2, $rBG3, $rBG4, $rBG5;
+	global string $iFG;
+	global string $textFieldGrp;
+	global string $previewField;
+	global string $OE_importPath;
+	global string $subDBox, $cacheBox;
+	global string $iStart;
+	global string $iEnd;
+	global string $iPad;
+	global string $iOffset;
+
+	//declare variables
+	string $rb[];
+	$file = (`internalVar -upd`+"oeblaster.pref");
+
+	switch($mode)
+	{
+		case 1: //reset mode
+
+		//reset import settings
+			intFieldGrp -e -v1 0 $iStart;
+			intFieldGrp -e -v1 0 $iEnd;
+			intFieldGrp -e -v1 0 $iPad;
+			intFieldGrp -e -v1 0 $iOffset;
+			textFieldButtonGrp -e -tx "" $OE_importPath;;
+			checkBox -e -v 1 $cacheBox;
+			checkBox -e -v 0 $subDBox;
+
+		//reset export settings
+			textFieldButtonGrp -e -tx "" $textFieldGrp;
+			textFieldGrp -e -tx "" $previewField;
+			intField -e -en false -v 0 $iF1;
+			intField -e -en false -v 0 $iF2;
+			intFieldGrp -e -v1 1 $iFG;
+			$rb = `radioCollection -q -cia $rCol1`;
+			radioCollection -e -sl $rb[0] $rCol1;
+			$rb = `radioCollection -q -cia $rCol2`;
+			radioCollection -e -sl $rb[0] $rCol2;
+			radioButtonGrp -e -sl 1 $rBG1;
+			radioButtonGrp -e -sl 1 $rBG2;
+			radioButtonGrp -e -sl 1 $rBG3;
+			radioButtonGrp -e -sl 1 $rBG4;
+			radioButtonGrp -e -sl 1 $rBG5;
+
+		//end of reset mode
+			break;
+
+		case 2:  //save mode
+
+			//open a file for writing
+			if(catch($fileId=`fopen $file "w"`))
+			{
+				error "Could not write to file!";
+				break;
+			}
+
+			//write the new default values
+			//export values
+			fprint $fileId (`intFieldGrp -q -v1 $iFG`+"\r"); 		//frame padding
+			$rb[0] = `radioCollection -q -sl $rCol1`;
+			fprint $fileId ($rb[0] + "\r"); 						//time slider
+			$rb[1] = `radioCollection -q -sl $rCol2`;
+			fprint $fileId ($rb[1] + "\r"); 						//combine options
+			fprint $fileId (`radioButtonGrp -q -sl $rBG1`+"\r");	//groups
+			fprint $fileId (`radioButtonGrp -q -sl $rBG2`+"\r");	//pt groups
+			fprint $fileId (`radioButtonGrp -q -sl $rBG3`+"\r");	//normals
+			fprint $fileId (`radioButtonGrp -q -sl $rBG4`+"\r");	//materials
+			fprint $fileId (`radioButtonGrp -q -sl $rBG5`+"\r");	//smoothing
+			//import values
+			fprint $fileId (`checkBox -q -v $cacheBox`+"\r");		//caching
+			fprint $fileId (`checkBox -q -v $subDBox`+"\r");		//sudD convert
+
+			//close the file
+			fclose $fileId;
+
+			//end of save mode
+			break;
+
+		case 3:  //load mode
+
+			//open a file for reading
+			if(`filetest -r $file`) $fileId=`fopen $file "r"`;
+			else break;
+
+			//read the settings
+			string $settings[]; //holds the settings
+			while ( !`feof $fileId` )
+			{
+				$settings[size($settings)] = `fgetline $fileId`;
+			}
+
+			//assign them
+			//export values
+			intFieldGrp -e -v1 (int($settings[0])) $iFG;			//frame padding
+			radioCollection -e -sl (strip($settings[1])) $rCol1;	//time slider
+			radioCollection -e -sl (strip($settings[2])) $rCol2;	//combine options
+			radioButtonGrp -e -sl (int($settings[3]))$rBG1;			//groups
+			radioButtonGrp -e -sl (int($settings[4]))$rBG2;			//pt groups
+			radioButtonGrp -e -sl (int($settings[5]))$rBG3;			//normals
+			radioButtonGrp -e -sl (int($settings[6]))$rBG4;			//materials
+			radioButtonGrp -e -sl (int($settings[7]))$rBG5;			//smoothing
+			//import values
+			checkBox -e -v (int($settings[8])) $cacheBox;			//caching
+			checkBox -e -v (int($settings[9])) $subDBox;			//sudD convert
+
+			//close the file
+			fclose $fileId;
+
+			//end of load mode
+			break;
+	}
+
+}//end of OE_Defaults()
+
+//==========================================================================================================================
+//Loads the help documentation
+//==========================================================================================================================
+global proc OEhelp(){
+	
+	global string $browser;
+		
+	if(`window -q -ex OE_Help`) deleteUI OE_Help;
+ 	window -s false -mxb false -rtf true -t "OBJ Export Blaster Documentation" OE_Help;
+ 	columnLayout;
+ 		rowColumnLayout -nc 2 -cw 1 50 -cw 2 50;
+ 			button -l "Back" -c "webBrowser -e -bk $browser";
+  			button -l "Forward" -c "webBrowser -e -fwd $browser";			
+ 		setParent ..;
+ 		$browser = `webBrowser -width 800 -height 600 -url "scripts.zbufferstudios.com/oeblaster/help.html"`;
+ 	showWindow;
+	
+}//end of OEhelp()
+/*
+//==========================================================================================================================
+//Used by the OBJREADER in order to pull the data from the disk as quickly as possible for cacheless scenes
+//==========================================================================================================================
+global proc OE_DirectRead(int $start, int $frame, string $path){
+	
+	//storage for the initial OBJ data--used to quicken the math by creating only one file read per frame
+	global vector $initialStateOBJ[];
+	
+	//if the initial state is unread, then read it
+	
+	//else read the current frame
+	
+	
+	
+}//end of OE_DirectRead()
+*/
+//==========================================================================================================================
+//End of OE_Blaster.mel
+//==========================================================================================================================
+
+
+
+/*
+
+$start = 1; //start obj seq
+$end = 24; //end obj seq
+$frame = frame;
+if(frame>$end) $frame = $end;
+else if(frame<$start) $frame = $start;
+$offset = 0; //time offset
+$size = 1580; //verts
+$cmd = "setAttr \"|OE_FLEA2|flea2OBJ|flea2OBJShape.pnts[0:1579]\" ";
+if(`objExists FLEA2_CACHE`)
+{
+$points = `getAttr ("FLEA2_CACHE.f" + ($frame+$offset))`;
+$cmd += $points;
+}
+else
+{
+$ext = string(frame);
+if(size($ext) < $padding)
+{
+$diff = ($padding - size($ext));
+for($j=0;$j<$diff;$j++)
+{
+$ext = "0" + $ext;
+}
+}
+vector $points[] = OBJ_Translator("D:/mydocs/maya/projects/default/data"+"/"+"flea2"+"."+$ext+".obj");
+float $pointFloat[];
+vector $pointVector;
+vector $delta;
+for($j=0;$j<size($points);$j++)
+{
+$pointFloat = `getAttr |OE_FLEA2|flea2OBJ|flea2OBJShape.vrts[$j]`;
+$pointVector = <<$pointFloat[0],$pointFloat[1],$pointFloat[2]>>;
+$delta = $points[$j] - $pointVector;
+$cmd += (($delta.x)+" "+($delta.y)+" "+($delta.z)+" ");
+}
+}
+eval $cmd;
+
+*/

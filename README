@@ -1,0 +1,56 @@
+MD2Export
+
+Plugin for Autodesk Maya to export Quake MD2 Files
+
+------------------------------------------------------------
+How to Build:
+------------------------------------------------------------
+
+Right now, I'm only including the source, so you'll have to build the plugin
+yourself using Visual Studio or via gcc on the command line. Later on,
+I'll build this plugin against all the versions of the Maya API that I have,
+so that you won't have to build this yourself if you'd rather just install
+the plugin.
+
+I've been building this project in Visual Studio 2008, so here
+is how I got it to build:
+ 
+1. Open the project properties window (Projects Menu > Project Properties) 
+
+Under the C/C++ tab, make sure that you add a directory path to 
+"Additional Include Directories" that points to the Maya API include 
+files located in your Maya Install directory-- e.g. 
+C:\Program Files\Autodesk\Maya2009\include
+
+Under the Linker tab, add a directory path to "Additional Libraries"
+for the lib directory in your Maya install 
+(e.g. C:\Program Files\Autodesk\Maya2009\lib)
+
+
+2. If your copy of Maya is 64 bit (as is mine), you'll need to go to the Active Configuration
+menu in the toolbar (usually a dropdown menu with "Win32" selected). In that
+dropdown menu, select "Edit", and in the window that appears create a duplicate 
+configuration, and select "x64" for the target architecture in the dropdown menu
+on the right.
+
+3. Select "Build Solution" from the build menu. You'll get some compiler warnings,
+but as long as it says "successful" at the end, you're good to go.
+
+------------------------------------------------------------
+How to Install in Maya
+------------------------------------------------------------
+The .mll plugin itself that is generated in the Debug/Release
+directory needs to go into the /<Maya install location>/bin/plug-ins
+directory (e.g. C:\Program Files\Autodesk\Maya2009\bin\plug-ins).
+Alternatively, you can load the plugin in Maya by going to Window > 
+Settings/Prefs > Plug-in manager and click "Browse" and select the 
+.mll that way
+
+The export script (MD2ExportOptionsScript.mel) needs to go into
+your "scripts" directory (e.g. C:\Users\you\My Documents\maya\scripts)
+
+
+------------------------------------------------------------
+TODO
+------------------------------------------------------------
+- add support for exporting GL Commands

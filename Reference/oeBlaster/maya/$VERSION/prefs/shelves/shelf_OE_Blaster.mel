@@ -1,0 +1,28 @@
+global proc shelf_OE_Blaster () {
+    global string $gBuffStr;
+    global string $gBuffStr0;
+    global string $gBuffStr1;
+
+
+    shelfButton
+        -enableCommandRepeat 1
+        -enable 1
+        -width 34
+        -height 34
+        -manage 1
+        -visible 1
+        -preventOverride 0
+        -align "center" 
+        -label "OE_Blaster" 
+        -labelOffset 0
+        -font "tinyBoldLabelFont" 
+        -image "OE_BlasterShelf.bmp" 
+        -image1 "OE_BlasterShelf.bmp" 
+        -style "iconOnly" 
+        -marginWidth 1
+        -marginHeight 1
+        -command "source OE_Blaster;\rOE_BlasterWindow();" 
+        -actionIsSubstitute 0
+    ;
+
+} 
